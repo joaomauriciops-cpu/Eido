@@ -1,74 +1,56 @@
-\# Eido
+\# Eido Vision
 
 
 
-Eido é um copiloto cognitivo pessoal focado em transformar captura espontânea de informações em organização executável.
+Eido is a cognitive continuity system.
 
 
 
-O usuário despeja:
-
-\- áudios
-
-\- pensamentos
-
-\- reuniões
-
-\- ideias
-
-\- tarefas
-
-\- compromissos
-
-\- contexto pessoal
+Its purpose is not productivity optimization, note-taking, or task management.
 
 
 
-E o sistema:
-
-\- estrutura automaticamente
-
-\- extrai tarefas
-
-\- agenda execução
-
-\- mantém memória longitudinal
-
-\- reduz carga cognitiva
+Its purpose is to reduce executive overload by transforming fragmented thoughts, conversations, meetings, and intentions into organized and actionable continuity.
 
 
 
-O foco principal é:
+Eido should feel like:
 
-execução e tranquilidade mental.
+\- a trusted external mind
 
+\- a calm executive assistant
 
-
-O produto é especialmente voltado para:
-
-\- TDAH
-
-\- sobrecarga mental
-
-\- dificuldade de organização
-
-\- excesso de contexto fragmentado
+\- low-friction cognitive support
 
 
 
-Princípios centrais:
+Core principles:
 
-\- quiet by default
+\- capture-first
 
-\- organização invisível
+\- low cognitive load
 
-\- captura rápida
+\- clarity over complexity
 
-\- execução acima de catalogação
+\- continuity over organization
 
-\- presença contínua sob demanda
+\- trust over automation
 
-\- memória persistente
+\- invisible intelligence
 
-\- baixa fricção
+
+
+Eido is especially compatible with:
+
+\- ADHD
+
+\- executive overload
+
+\- anxiety-driven forgetfulness
+
+\- high-context cognitive work
+
+
+
+But it should remain universal rather than ADHD-branded.
 

@@ -2,7 +2,7 @@
 
 
 
-\## Phase 1 — Core Capture System
+\## Phase 1 — Magic Capture
 
 
 
@@ -54,6 +54,8 @@ Transform voice capture into executable organization.
 
 \- Daily overview
 
+\- Pending intentions
+
 
 
 \---
@@ -75,6 +77,8 @@ Transform voice capture into executable organization.
 \- Personal patterns
 
 \- Smart recall
+
+\- Semantic search
 
 
 

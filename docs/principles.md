@@ -1,54 +1,58 @@
-\# Product Principles
+\### Minimal Decisions
+
+Users should rarely decide:
+
+\- where to save
+
+\- how to categorize
+
+\- how to organize
 
 
 
-\## 1. Quiet by default
+\### Calm Interface
 
-O sistema não deve interromper desnecessariamente.
+The app should feel:
 
+\- quiet
 
+\- clear
 
-\## 2. Execution over organization
+\- stable
 
-O objetivo não é criar notas bonitas.
-
-O objetivo é fazer a vida funcionar melhor.
-
-
-
-\## 3. Cognitive load reduction
-
-Toda decisão deve reduzir carga mental.
+\- trustworthy
 
 
 
-\## 4. Fast capture
+Not:
 
-Capturar deve ser extremamente rápido.
+\- overwhelming
 
+\- hyper-productive
 
-
-\## 5. Invisible structure
-
-O usuário não deve precisar organizar manualmente.
+\- noisy
 
 
 
-\## 6. Longitudinal memory
+\### AI Should Be Mostly Invisible
 
-O sistema deve lembrar do contexto ao longo do tempo.
-
-
-
-\## 7. Trust first
-
-O usuário precisa confiar no sistema.
+Users should feel organization happened naturally.
 
 
 
-\## 8. Suggestions, not control
+\### Review Before Action
 
-O sistema sugere e auxilia.
+AI-generated tasks/events should be reviewed before confirmation.
 
-Não controla o usuário.
+
+
+\### Low Guilt Design
+
+The app should never punish users for inconsistency or unfinished tasks.
+
+
+
+\### Timeline Over Hierarchy
+
+Memory should feel chronological and contextual rather than folder-based.
 
