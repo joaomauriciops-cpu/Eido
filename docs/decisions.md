@@ -30,6 +30,22 @@
 
 
 
+\## Infrastructure Decisions
+
+
+
+Firebase chosen over Supabase for MVP because:
+
+\- faster mobile iteration
+
+\- simpler Expo integration
+
+\- lower infrastructure friction
+
+\- better early-stage velocity
+
+
+
 \---
 
 

@@ -12,15 +12,13 @@
 
 \## Backend
 
-\- Supabase
+Firebase Auth
 
-\- PostgreSQL
+Firestore
 
-\- Supabase Storage
+Firebase Storage
 
-\- Supabase Edge Functions
-
-
+Firebase Functions
 
 \## AI
 
