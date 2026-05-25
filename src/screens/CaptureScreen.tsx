@@ -1,107 +1,88 @@
-import { Audio } from 'expo-av';
-import { useEffect, useState } from 'react';
-
+import React, { useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
-  StyleSheet,
   ScrollView,
-} from 'react-native';
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
+
+import { Audio } from "expo-av";
 
 import {
-  signInAnonymously,
-  onAuthStateChanged,
-} from 'firebase/auth';
-
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-} from 'firebase/storage';
-
-import {
-  collection,
   addDoc,
+  collection,
+  doc,
   serverTimestamp,
-} from 'firebase/firestore';
+  updateDoc,
+} from "firebase/firestore";
 
-import {
-  httpsCallable,
-} from 'firebase/functions';
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-import {
-  auth,
-  storage,
-  db,
-  functions,
-} from '../lib/firebase';
+import { httpsCallable } from "firebase/functions";
+
+import { auth, db, storage, functions } from "../lib/firebase";
+
+type ExtractedTask = {
+  title?: string;
+  description?: string;
+  due_date?: string | null;
+  confidence?: number;
+};
+
+type ExtractedEvent = {
+  title?: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  confidence?: number;
+};
+
+type ExtractedIdea = {
+  title?: string;
+  content?: string;
+};
+
+type ExtractionResult = {
+  summary?: string;
+  tasks?: ExtractedTask[];
+  events?: ExtractedEvent[];
+  ideas?: ExtractedIdea[];
+  notes?: string[];
+};
 
 export default function CaptureScreen() {
-  const [recording, setRecording] =
-    useState<Audio.Recording | null>(null);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
 
-  const [audioUri, setAudioUri] =
-    useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const [message, setMessage] =
-    useState('Conectando ao Eido...');
+  const [saving, setSaving] = useState(false);
 
-  const [userId, setUserId] =
-    useState<string | null>(null);
+  const [transcript, setTranscript] = useState("");
 
-  const [isUploading, setIsUploading] =
-    useState(false);
-
-  const [transcript, setTranscript] =
-    useState('');
+  const [captureId, setCaptureId] = useState<string | null>(null);
 
   const [extraction, setExtraction] =
-    useState<any>(null);
+    useState<ExtractionResult | null>(null);
 
-  const isRecording = recording !== null;
-
-  useEffect(() => {
-    async function connectUser() {
-      try {
-        if (!auth.currentUser) {
-          const result =
-            await signInAnonymously(auth);
-
-          setUserId(result.user.uid);
-        } else {
-          setUserId(auth.currentUser.uid);
-        }
-
-        setMessage('Toque para gravar uma ideia.');
-      } catch (error: any) {
-        setMessage(
-          `Erro auth: ${error.message}`
-        );
-      }
-    }
-
-    connectUser();
-
-    const unsubscribe =
-      onAuthStateChanged(auth, (user) => {
-        if (user) {
-          setUserId(user.uid);
-        }
-      });
-
-    return unsubscribe;
-  }, []);
+  const [saved, setSaved] = useState(false);
 
   async function startRecording() {
     try {
-      setMessage('Pedindo permissão...');
+      setSaved(false);
+      setTranscript("");
+      setExtraction(null);
+      setCaptureId(null);
 
-      const permission =
-        await Audio.requestPermissionsAsync();
+      const permission = await Audio.requestPermissionsAsync();
 
       if (!permission.granted) {
-        setMessage('Permissão negada.');
+        Alert.alert(
+          "Permissão necessária",
+          "O Eido precisa acessar o microfone."
+        );
+
         return;
       }
 
@@ -110,22 +91,15 @@ export default function CaptureScreen() {
         playsInSilentModeIOS: true,
       });
 
-      const result =
-        await Audio.Recording.createAsync(
-          Audio.RecordingOptionsPresets.HIGH_QUALITY
-        );
-
-      setRecording(result.recording);
-
-      setAudioUri(null);
-      setTranscript('');
-      setExtraction(null);
-
-      setMessage('Gravando...');
-    } catch (error: any) {
-      setMessage(
-        `Erro gravação: ${error.message}`
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
+
+      setRecording(recording);
+    } catch (error) {
+      console.error(error);
+
+      Alert.alert("Erro", "Não foi possível iniciar a gravação.");
     }
   }
 
@@ -133,7 +107,7 @@ export default function CaptureScreen() {
     try {
       if (!recording) return;
 
-      setMessage('Finalizando...');
+      setLoading(true);
 
       await recording.stopAndUnloadAsync();
 
@@ -142,243 +116,385 @@ export default function CaptureScreen() {
       setRecording(null);
 
       if (!uri) {
-        setMessage('Áudio não encontrado.');
+        Alert.alert("Erro", "Áudio não encontrado.");
+
+        setLoading(false);
+
         return;
       }
 
-      setAudioUri(uri);
+      const user = auth.currentUser;
 
-      setMessage(
-        'Gravação concluída.'
-      );
-    } catch (error: any) {
-      setMessage(
-        `Erro ao parar: ${error.message}`
-      );
-    }
-  }
+      if (!user) {
+        Alert.alert("Erro", "Usuário não autenticado.");
 
-  async function uploadRecording() {
-    try {
-      if (!audioUri) {
-        setMessage('Nenhum áudio.');
+        setLoading(false);
+
         return;
       }
 
-      setIsUploading(true);
+      const response = await fetch(uri);
 
-      let currentUser = auth.currentUser;
+      const blob = await response.blob();
 
-      if (!currentUser) {
-        const result =
-          await signInAnonymously(auth);
+      const fileName = `${Date.now()}.m4a`;
 
-        currentUser = result.user;
-      }
-
-      const currentUserId =
-        currentUser.uid;
-
-      setUserId(currentUserId);
-
-      setMessage('Enviando áudio...');
-
-      const response =
-        await fetch(audioUri);
-
-      const blob =
-        await response.blob();
-
-      const filePath =
-        `users/${currentUserId}/captures/${Date.now()}.m4a`;
-
-      const storageRef =
-        ref(storage, filePath);
-
-      await uploadBytes(
-        storageRef,
-        blob
+      const storageRef = ref(
+        storage,
+        `captures/${user.uid}/${fileName}`
       );
 
-      const downloadUrl =
-        await getDownloadURL(storageRef);
+      await uploadBytes(storageRef, blob);
 
-      setMessage('Criando capture...');
+      const audioUrl = await getDownloadURL(storageRef);
 
-      const docRef = await addDoc(
-        collection(db, 'captures'),
-        {
-          userId: currentUserId,
-          audioUrl: downloadUrl,
-          audioPath: filePath,
-          status: 'uploaded',
-          createdAt: serverTimestamp(),
-        }
+      const captureRef = await addDoc(collection(db, "captures"), {
+        user_id: user.uid,
+
+        audioUrl: audioUrl,
+
+        audio_url: audioUrl,
+
+        transcript: "",
+
+        summary: "",
+
+        status: "uploaded",
+
+        created_at: serverTimestamp(),
+      });
+
+      setCaptureId(captureRef.id);
+
+      const transcribeCaptureDev = httpsCallable(
+        functions,
+        "transcribeCaptureDev"
       );
 
-      setMessage('Transcrevendo áudio...');
-
-      const transcribeCaptureDev =
-        httpsCallable(
-          functions,
-          'transcribeCaptureDev'
-        );
-
-      const transcriptResult: any =
+      const transcriptionResult: any =
         await transcribeCaptureDev({
-          captureId: docRef.id,
+          captureId: captureRef.id,
         });
 
       const transcriptText =
-        transcriptResult.data.transcript;
+        transcriptionResult?.data?.transcript ||
+        transcriptionResult?.data?.text ||
+        "";
 
       setTranscript(transcriptText);
 
-      setMessage('Extraindo estrutura...');
-
-      const extractCaptureDev =
-        httpsCallable(
-          functions,
-          'extractCaptureDev'
-        );
+      const extractCaptureDev = httpsCallable(
+        functions,
+        "extractCaptureDev"
+      );
 
       const extractionResult: any =
         await extractCaptureDev({
-          captureId: docRef.id,
+          captureId: captureRef.id,
         });
 
-      setExtraction(
-        extractionResult.data.extraction
-      );
+      const extractionData =
+        extractionResult?.data?.extraction ||
+        extractionResult?.data?.structured ||
+        extractionResult?.data ||
+        {};
 
-      setMessage(
-        'Extração concluída.'
-      );
-    } catch (error: any) {
-      console.log(error);
+      const normalizedExtraction: ExtractionResult = {
+        summary: extractionData.summary || "",
 
-      setMessage(
-        `${error.code || 'erro'}\n${error.message || String(error)}`
+        tasks: Array.isArray(extractionData.tasks)
+          ? extractionData.tasks
+          : [],
+
+        events: Array.isArray(extractionData.events)
+          ? extractionData.events
+          : [],
+
+        ideas: Array.isArray(extractionData.ideas)
+          ? extractionData.ideas
+          : [],
+
+        notes: Array.isArray(extractionData.notes)
+          ? extractionData.notes
+          : [],
+      };
+
+      setExtraction(normalizedExtraction);
+
+      await updateDoc(doc(db, "captures", captureRef.id), {
+        transcript: transcriptText,
+
+        summary: normalizedExtraction.summary || "",
+
+        extraction: normalizedExtraction,
+
+        status: "review_ready",
+
+        updated_at: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error(error);
+
+      Alert.alert(
+        "Erro",
+        "Algo deu errado ao processar a captura."
       );
     } finally {
-      setIsUploading(false);
+      setLoading(false);
+    }
+  }
+
+  async function confirmAndSave() {
+    try {
+      if (!captureId || !extraction) {
+        Alert.alert(
+          "Nada para salvar",
+          "Faça uma captura primeiro."
+        );
+
+        return;
+      }
+
+      const user = auth.currentUser;
+
+      if (!user) {
+        Alert.alert("Erro", "Usuário não autenticado.");
+
+        return;
+      }
+
+      setSaving(true);
+
+      for (const task of extraction.tasks || []) {
+        if (!task.title) continue;
+
+        await addDoc(collection(db, "tasks"), {
+          user_id: user.uid,
+
+          capture_id: captureId,
+
+          title: task.title,
+
+          description: task.description || "",
+
+          due_date: task.due_date || null,
+
+          status: "open",
+
+          confidence: task.confidence || null,
+
+          created_at: serverTimestamp(),
+        });
+      }
+
+      for (const event of extraction.events || []) {
+        if (!event.title) continue;
+
+        await addDoc(collection(db, "events"), {
+          user_id: user.uid,
+
+          capture_id: captureId,
+
+          title: event.title,
+
+          start_time: event.start_time || null,
+
+          end_time: event.end_time || null,
+
+          confidence: event.confidence || null,
+
+          created_at: serverTimestamp(),
+        });
+      }
+
+      for (const idea of extraction.ideas || []) {
+        await addDoc(collection(db, "ideas"), {
+          user_id: user.uid,
+
+          capture_id: captureId,
+
+          title: idea.title || "Ideia",
+
+          content: idea.content || "",
+
+          created_at: serverTimestamp(),
+        });
+      }
+
+      await updateDoc(doc(db, "captures", captureId), {
+        status: "saved",
+
+        saved_at: serverTimestamp(),
+      });
+
+      setSaved(true);
+
+      Alert.alert(
+        "Tudo salvo",
+        "O Eido organizou sua captura."
+      );
+    } catch (error) {
+      console.error(error);
+
+      Alert.alert(
+        "Erro",
+        "Não foi possível salvar os itens."
+      );
+    } finally {
+      setSaving(false);
     }
   }
 
   return (
     <ScrollView
       contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.title}>
-        Eido
-      </Text>
+      <Text style={styles.logo}>Eido</Text>
 
-      <Text style={styles.message}>
-        {message}
+      <Text style={styles.subtitle}>
+        Capture agora. Organize depois.
       </Text>
 
       <TouchableOpacity
         style={[
-          styles.button,
-          isRecording &&
-            styles.buttonRecording,
+          styles.recordButton,
+          recording && styles.recordingButton,
         ]}
         onPress={
-          isRecording
-            ? stopRecording
-            : startRecording
+          recording ? stopRecording : startRecording
         }
-        disabled={isUploading}
       >
-        <Text style={styles.buttonText}>
-          {isRecording
-            ? 'Parar'
-            : 'Gravar'}
+        <Text style={styles.recordButtonText}>
+          {recording
+            ? "Parar gravação"
+            : "Gravar áudio"}
         </Text>
       </TouchableOpacity>
 
-      {audioUri && (
-        <TouchableOpacity
-          style={styles.uploadButton}
-          onPress={uploadRecording}
-          disabled={isUploading}
-        >
-          <Text style={styles.buttonText}>
-            {isUploading
-              ? 'Processando...'
-              : 'Enviar áudio'}
+      {loading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" />
+
+          <Text style={styles.loadingText}>
+            Processando captura...
           </Text>
-        </TouchableOpacity>
+        </View>
       )}
 
-      {transcript !== '' && (
+      {transcript ? (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>
-            Transcript
+            Transcrição
           </Text>
 
-          <Text style={styles.cardText}>
+          <Text style={styles.bodyText}>
             {transcript}
           </Text>
         </View>
-      )}
+      ) : null}
 
-      {extraction && (
+      {extraction ? (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>
-            Summary
+            Resumo
           </Text>
 
-          <Text style={styles.cardText}>
-            {extraction.summary}
+          <Text style={styles.bodyText}>
+            {extraction.summary || "Sem resumo."}
           </Text>
 
-          <Text style={styles.sectionTitle}>
-            Tasks
-          </Text>
-
-          {extraction.tasks?.map(
-            (task: any, index: number) => (
-              <Text
-                key={index}
-                style={styles.cardText}
-              >
-                • {task.title}
+          {(extraction.tasks || []).length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>
+                Tarefas
               </Text>
-            )
+
+              {extraction.tasks?.map(
+                (task, index) => (
+                  <View
+                    key={index}
+                    style={styles.itemCard}
+                  >
+                    <Text style={styles.itemTitle}>
+                      {task.title}
+                    </Text>
+
+                    {task.description ? (
+                      <Text style={styles.bodyText}>
+                        {task.description}
+                      </Text>
+                    ) : null}
+                  </View>
+                )
+              )}
+            </>
           )}
 
-          <Text style={styles.sectionTitle}>
-            Ideas
-          </Text>
-
-          {extraction.ideas?.map(
-            (idea: any, index: number) => (
-              <Text
-                key={index}
-                style={styles.cardText}
-              >
-                • {idea.title}
+          {(extraction.events || []).length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>
+                Eventos
               </Text>
-            )
+
+              {extraction.events?.map(
+                (event, index) => (
+                  <View
+                    key={index}
+                    style={styles.itemCard}
+                  >
+                    <Text style={styles.itemTitle}>
+                      {event.title}
+                    </Text>
+                  </View>
+                )
+              )}
+            </>
           )}
 
-          <Text style={styles.sectionTitle}>
-            Notes
-          </Text>
-
-          {extraction.notes?.map(
-            (note: string, index: number) => (
-              <Text
-                key={index}
-                style={styles.cardText}
-              >
-                • {note}
+          {(extraction.ideas || []).length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>
+                Ideias
               </Text>
-            )
+
+              {extraction.ideas?.map(
+                (idea, index) => (
+                  <View
+                    key={index}
+                    style={styles.itemCard}
+                  >
+                    <Text style={styles.itemTitle}>
+                      {idea.title || "Ideia"}
+                    </Text>
+
+                    <Text style={styles.bodyText}>
+                      {idea.content}
+                    </Text>
+                  </View>
+                )
+              )}
+            </>
           )}
+
+          <TouchableOpacity
+            style={[
+              styles.confirmButton,
+              saved && styles.savedButton,
+            ]}
+            disabled={saving || saved}
+            onPress={confirmAndSave}
+          >
+            <Text style={styles.confirmButtonText}>
+              {saved
+                ? "Salvo"
+                : saving
+                ? "Salvando..."
+                : "Confirmar e salvar"}
+            </Text>
+          </TouchableOpacity>
         </View>
-      )}
+      ) : null}
     </ScrollView>
   );
 }
@@ -386,71 +502,143 @@ export default function CaptureScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#0F172A',
-    alignItems: 'center',
-    padding: 24,
-    paddingTop: 80,
+
+    backgroundColor: "#F5F4EF",
+
+    paddingHorizontal: 24,
+
+    paddingTop: 72,
+
+    paddingBottom: 48,
   },
 
-  title: {
-    fontSize: 42,
-    color: 'white',
-    marginBottom: 24,
-    fontWeight: '600',
+  logo: {
+    fontSize: 48,
+
+    fontWeight: "700",
+
+    color: "#111827",
   },
 
-  message: {
-    color: '#CBD5E1',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-
-  button: {
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 40,
-    paddingVertical: 20,
-    borderRadius: 999,
-  },
-
-  buttonRecording: {
-    backgroundColor: '#DC2626',
-  },
-
-  uploadButton: {
-    marginTop: 20,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 999,
-  },
-
-  buttonText: {
-    color: 'white',
+  subtitle: {
     fontSize: 20,
-    fontWeight: '600',
+
+    color: "#6B7280",
+
+    marginTop: 12,
+
+    marginBottom: 40,
+
+    lineHeight: 28,
+  },
+
+  recordButton: {
+    backgroundColor: "#111827",
+
+    borderRadius: 24,
+
+    paddingVertical: 22,
+
+    alignItems: "center",
+
+    marginBottom: 28,
+  },
+
+  recordingButton: {
+    backgroundColor: "#7F1D1D",
+  },
+
+  recordButtonText: {
+    color: "#FFFFFF",
+
+    fontSize: 18,
+
+    fontWeight: "600",
+  },
+
+  loadingContainer: {
+    alignItems: "center",
+
+    marginTop: 24,
+  },
+
+  loadingText: {
+    marginTop: 12,
+
+    color: "#6B7280",
   },
 
   card: {
-    width: '100%',
-    backgroundColor: '#1E293B',
-    padding: 20,
-    borderRadius: 20,
-    marginTop: 32,
+    backgroundColor: "#FFFFFF",
+
+    borderRadius: 28,
+
+    padding: 24,
+
+    marginBottom: 24,
   },
 
   sectionTitle: {
-    color: 'white',
     fontSize: 20,
-    fontWeight: '600',
+
+    fontWeight: "700",
+
     marginBottom: 12,
+
     marginTop: 16,
+
+    color: "#111827",
   },
 
-  cardText: {
-    color: '#CBD5E1',
+  bodyText: {
     fontSize: 16,
-    marginBottom: 8,
-    lineHeight: 24,
+
+    lineHeight: 26,
+
+    color: "#374151",
+  },
+
+  itemCard: {
+    backgroundColor: "#F3F4F6",
+
+    borderRadius: 18,
+
+    padding: 16,
+
+    marginBottom: 12,
+  },
+
+  itemTitle: {
+    fontSize: 16,
+
+    fontWeight: "600",
+
+    color: "#111827",
+
+    marginBottom: 4,
+  },
+
+  confirmButton: {
+    backgroundColor: "#111827",
+
+    borderRadius: 20,
+
+    paddingVertical: 18,
+
+    alignItems: "center",
+
+    marginTop: 28,
+  },
+
+  savedButton: {
+    backgroundColor: "#166534",
+  },
+
+  confirmButtonText: {
+    color: "#FFFFFF",
+
+    fontSize: 17,
+
+    fontWeight: "600",
   },
 });
